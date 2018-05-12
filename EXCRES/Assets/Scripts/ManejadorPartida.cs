@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public static class ManejadorTeclas {
+public static class ManejadorPartida {
 
     public static KeyCode TeclaMoverAdelante = KeyCode.W;
     public static KeyCode TeclaMoverAtras = KeyCode.S;
@@ -28,6 +28,11 @@ public static class ManejadorTeclas {
         PresionandoDerecha = Input.GetKey(TeclaMoverDerecha);
         PresionandoCorrer = Input.GetKey(TeclaCorrer);
         PresionandoInteractuar = Input.GetKey(TeclaInteractuar);
+    }
+
+    public static IEnumerator Esperar(float tiempo)
+    {
+        yield return new WaitForSeconds(tiempo);
     }
 
 }

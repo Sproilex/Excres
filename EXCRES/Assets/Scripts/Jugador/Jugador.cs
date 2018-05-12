@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine.UI;
 
 public class Jugador : MonoBehaviour
@@ -8,14 +9,32 @@ public class Jugador : MonoBehaviour
     [SerializeField]
     float VelocidadCaminar;
     [SerializeField]
+    float VelocidadCansancio;
+    [SerializeField]
     float VelocidadCorrer;
+    [SerializeField]
+    int CantidadEnergia;
+    [SerializeField]
+    int Vida = 100;
+    [SerializeField]
+    [Tooltip("En segundos")]
+    float TiempoEsperaSubirEnergia = 1;
+    [SerializeField]
+    float CantidadSubirEnergia = .5f;
+    float cantidadEnergiaActual;
+    [SerializeField]
+    float RangoDetectarColision;
     private float velocidadActual;
+    private bool EsPosibleCorrer = true;
 
     [Header("Objetos Necesarios")]
     [SerializeField]
     Image BarraVida;
-
-    private int Vida = 100;
+    [SerializeField]
+    Image BarraEnergia;
+    GameObject PadreBarraEnergia;
+    [SerializeField]
+    GameObject ObjetoJugador;
 
     private Camera Camara;
 
@@ -28,52 +47,88 @@ public class Jugador : MonoBehaviour
         direccionFrontal.y = 0;
         direccionFrontal = Vector3.Normalize(direccionFrontal);
         direccionLateral = Quaternion.Euler(new Vector3(0, 90, 0)) * direccionFrontal;
+        cantidadEnergiaActual = CantidadEnergia;
+        PadreBarraEnergia = BarraEnergia.transform.parent.gameObject;
     }
 
     void Update()
     {
-        ManejadorTeclas.VerificarInput();
-        if (ManejadorTeclas.IntentandoMover)
+        ManejadorPartida.VerificarInput();
+        if (ManejadorPartida.IntentandoMover)
             StartCoroutine(UpdateControlador());
     }
 
     IEnumerator UpdateControlador()
     {
-
-        ManejadorTeclas.VerificarInput();
-
-        if (ManejadorTeclas.PresionandoCorrer)
+        if (ManejadorPartida.PresionandoCorrer && EsPosibleCorrer)
         {
             velocidadActual = VelocidadCorrer;
-            //BarraEnergia.gameObject.SetActive(true);
+            cantidadEnergiaActual -= .5f;
         }
+        else if (!EsPosibleCorrer)
+            velocidadActual = VelocidadCansancio;
         else
         {
             velocidadActual = VelocidadCaminar;
-           // BarraEnergia.gameObject.SetActive(false);
         }
 
-        Vector3 movimientoLateral = direccionLateral * velocidadActual * Time.deltaTime * (ManejadorTeclas.PresionandoDerecha ? 1 : ManejadorTeclas.PresionandoIzquierda ? -1 : 0);
-        Vector3 movimientoFrontal = direccionFrontal * velocidadActual * Time.deltaTime * (ManejadorTeclas.PresionandoAdelante ? 1 : ManejadorTeclas.PresionandoAtras ? -1 : 0);
+        StartCoroutine(ControlarBarraEnergia(ManejadorPartida.PresionandoCorrer));
+
+        Vector3 movimientoLateral = direccionLateral * velocidadActual * Time.deltaTime * (ManejadorPartida.PresionandoDerecha ? 1 : ManejadorPartida.PresionandoIzquierda ? -1 : 0);
+        Vector3 movimientoFrontal = direccionFrontal * velocidadActual * Time.deltaTime * (ManejadorPartida.PresionandoAdelante ? 1 : ManejadorPartida.PresionandoAtras ? -1 : 0);
 
         Vector3 vectorarreglado = movimientoLateral + movimientoFrontal;
-        vectorarreglado = new Vector3(vectorarreglado.x / 2,0,vectorarreglado.z / 2);
+        vectorarreglado = new Vector3(vectorarreglado.x / 2, 0, vectorarreglado.z / 2);
 
         Vector3 direccionMirar = Vector3.Normalize(vectorarreglado);
 
-        transform.forward = direccionMirar;
-        transform.position += vectorarreglado;
+        ObjetoJugador.transform.forward = direccionMirar;
 
-        yield return new WaitForSeconds(.5f);
+        Ray rayo = new Ray();
+        rayo.direction = ObjetoJugador.transform.forward;
+        rayo.origin = ObjetoJugador.transform.position;
+
+        if (!Physics.Raycast(rayo,RangoDetectarColision))
+            ObjetoJugador.transform.parent.position += vectorarreglado;
+
+        yield return new WaitForSeconds(1);
+    }
+
+    IEnumerator ControlarBarraEnergia(bool bajarBarra)
+    {
+        BarraEnergia.fillAmount = cantidadEnergiaActual / CantidadEnergia;
+
+        if (cantidadEnergiaActual == 0)
+            EsPosibleCorrer = false;
+
+        if (bajarBarra)
+            PadreBarraEnergia.SetActive(true);
+        else
+        {
+            if (cantidadEnergiaActual < CantidadEnergia)
+            {
+                yield return ManejadorPartida.Esperar(TiempoEsperaSubirEnergia);
+                cantidadEnergiaActual += CantidadSubirEnergia;
+                StartCoroutine(ControlarBarraEnergia(false));
+            }
+            else
+            {
+                cantidadEnergiaActual = CantidadEnergia;
+                EsPosibleCorrer = true;
+                PadreBarraEnergia.SetActive(false);
+            }
+        }
+
+        yield return null;
     }
 
     public void BajarVida(int cantidad)
     {
         Vida -= cantidad;
-        ManejarBarra();
+        ManejarBarraVida();
     }
 
-    public void ManejarBarra()
+    public void ManejarBarraVida()
     {
         BarraVida.fillAmount = Vida / 100f;
     }
