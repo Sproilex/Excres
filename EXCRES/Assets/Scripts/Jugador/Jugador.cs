@@ -34,11 +34,22 @@ public class Jugador : MonoBehaviour
     Image BarraEnergia;
     GameObject PadreBarraEnergia;
     [SerializeField]
-    GameObject ObjetoJugador;
+    GameObject AgrupadorJugador;
 
     private Camera Camara;
 
     Vector3 direccionFrontal, direccionLateral;
+    //Escalar
+    [SerializeField]
+    private float VelocidadEscalar;
+    private bool estaEscalando;
+    private float distanciaEscalada;
+    private float nivelEscalada;
+    private float offsetEscalada;
+    private Vector3 posicionLLegarEscalada;
+    private Vector3 posicionInicial;
+
+    private Rigidbody rigidbody;
 
     void Start()
     {
@@ -49,6 +60,7 @@ public class Jugador : MonoBehaviour
         direccionLateral = Quaternion.Euler(new Vector3(0, 90, 0)) * direccionFrontal;
         cantidadEnergiaActual = CantidadEnergia;
         PadreBarraEnergia = BarraEnergia.transform.parent.gameObject;
+        rigidbody = GetComponent<Rigidbody>();
     }
 
     void Update()
@@ -60,38 +72,68 @@ public class Jugador : MonoBehaviour
 
     IEnumerator UpdateControlador()
     {
-        if (ManejadorPartida.PresionandoCorrer && EsPosibleCorrer)
+        if (!estaEscalando)
         {
-            velocidadActual = VelocidadCorrer;
-            cantidadEnergiaActual -= .5f;
-        }
-        else if (!EsPosibleCorrer)
-            velocidadActual = VelocidadCansancio;
-        else
-        {
-            velocidadActual = VelocidadCaminar;
-        }
+            if (ManejadorPartida.PresionandoCorrer && EsPosibleCorrer)
+            {
+                velocidadActual = VelocidadCorrer;
+                cantidadEnergiaActual -= .5f;
+            }
+            else if (!EsPosibleCorrer)
+                velocidadActual = VelocidadCansancio;
+            else
+            {
+                velocidadActual = VelocidadCaminar;
+            }
 
-        StartCoroutine(ControlarBarraEnergia(ManejadorPartida.PresionandoCorrer));
+            StartCoroutine(ControlarBarraEnergia(ManejadorPartida.PresionandoCorrer));
 
-        Vector3 movimientoLateral = direccionLateral * velocidadActual * Time.deltaTime * (ManejadorPartida.PresionandoDerecha ? 1 : ManejadorPartida.PresionandoIzquierda ? -1 : 0);
-        Vector3 movimientoFrontal = direccionFrontal * velocidadActual * Time.deltaTime * (ManejadorPartida.PresionandoAdelante ? 1 : ManejadorPartida.PresionandoAtras ? -1 : 0);
+            Vector3 movimientoLateral = direccionLateral * velocidadActual * Time.deltaTime * (ManejadorPartida.PresionandoDerecha ? 1 : ManejadorPartida.PresionandoIzquierda ? -1 : 0);
+            Vector3 movimientoFrontal = direccionFrontal * velocidadActual * Time.deltaTime * (ManejadorPartida.PresionandoAdelante ? 1 : ManejadorPartida.PresionandoAtras ? -1 : 0);
 
-        Vector3 vectorarreglado = movimientoLateral + movimientoFrontal;
-        vectorarreglado = new Vector3(vectorarreglado.x / 2, 0, vectorarreglado.z / 2);
+            Vector3 vectorarreglado = movimientoLateral + movimientoFrontal;
+            vectorarreglado = new Vector3(vectorarreglado.x / 2, 0, vectorarreglado.z / 2);
 
-        Vector3 direccionMirar = Vector3.Normalize(vectorarreglado);
+            Vector3 direccionMirar = Vector3.Normalize(vectorarreglado);
 
-        ObjetoJugador.transform.forward = direccionMirar;
+            ColocarForward(direccionMirar);
 
-        Ray rayo = new Ray();
-        rayo.direction = ObjetoJugador.transform.forward;
-        rayo.origin = ObjetoJugador.transform.position;
+            Ray rayo = new Ray();
+            rayo.direction = this.transform.forward;
+            rayo.origin = this.transform.position;
 
-        if (!Physics.Raycast(rayo,RangoDetectarColision))
-            ObjetoJugador.transform.parent.position += vectorarreglado;
+            if (!Physics.Raycast(rayo, RangoDetectarColision))
+                this.transform.position += vectorarreglado;
+        } //Caminar
 
         yield return new WaitForSeconds(1);
+    }
+
+    IEnumerator EscalarJugador()
+    {
+        yield return new WaitForSeconds(.01f);
+        nivelEscalada += Mathf.Abs(.01f / (distanciaEscalada)) * VelocidadEscalar;
+        Debug.Log(nivelEscalada);
+        transform.position = Vector3.Lerp(posicionInicial, posicionLLegarEscalada, nivelEscalada);
+
+        if (nivelEscalada < 1)
+            StartCoroutine(EscalarJugador());
+        else
+        {
+            Vector3 agregarForward = new Vector3(Mathf.Abs(transform.forward.x) == 1 ? offsetEscalada * (transform.forward.x.ToString().Contains("-") ? -1 : 1) : Mathf.Abs(transform.forward.x) > 0 ? offsetEscalada / 2 * (transform.forward.x.ToString().Contains("-") ? -1 : 1) : 0,
+                                                 0,
+                                                 Mathf.Abs(transform.forward.z) == 1 ? offsetEscalada * (transform.forward.z.ToString().Contains("-") ? -1 : 1) : Mathf.Abs(transform.forward.z) > 0 ? offsetEscalada / 2 * (transform.forward.z.ToString().Contains("-") ? -1 : 1) : 0);
+            transform.position += transform.forward + agregarForward;
+            rigidbody.isKinematic = false;
+            rigidbody.useGravity = true;
+            distanciaEscalada = 0;
+            nivelEscalada = 0;
+            offsetEscalada = 0;
+            posicionLLegarEscalada = Vector3.zero;
+            posicionInicial = Vector3.zero;
+            estaEscalando = false;
+            yield return null;
+        }
     }
 
     IEnumerator ControlarBarraEnergia(bool bajarBarra)
@@ -131,5 +173,28 @@ public class Jugador : MonoBehaviour
     public void ManejarBarraVida()
     {
         BarraVida.fillAmount = Vida / 100f;
+    }
+
+    public void AsignarObjetivoEscalada(Vector3 posicionObstaculo,Vector3 posicionObjetoLLegar,float offsetFinal)
+    {
+        if (!estaEscalando && rigidbody.velocity.y == 0)
+        {
+            rigidbody.isKinematic = true;
+            rigidbody.useGravity = false;
+            ColocarForward(posicionObstaculo - this.transform.position);
+            posicionInicial = transform.position;
+            posicionLLegarEscalada = new Vector3(transform.position.x, posicionObjetoLLegar.y,transform.position.z);
+            distanciaEscalada = Vector3.Distance(posicionObjetoLLegar, this.transform.position);
+            offsetEscalada = offsetFinal;
+            estaEscalando = true;
+            StartCoroutine(EscalarJugador());
+        }
+    }
+
+    private void ColocarForward(Vector3 forwardColocar)
+    {
+        AgrupadorJugador.transform.SetParent(AgrupadorJugador.transform.parent.parent);
+        this.transform.forward = forwardColocar;
+        AgrupadorJugador.transform.SetParent(this.transform);
     }
 }
