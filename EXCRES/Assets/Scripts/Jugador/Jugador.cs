@@ -3,6 +3,8 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.UI;
 
+public enum TipoEscalar { Arbol = 1, Roca = 2 };
+
 public class Jugador : MonoBehaviour
 {
     [Header("Parametros de Informacion")]
@@ -24,6 +26,8 @@ public class Jugador : MonoBehaviour
     float cantidadEnergiaActual;
     [SerializeField]
     float RangoDetectarColision;
+    [SerializeField]
+    Vector3 DistanciaMantenerCamara;
     private float velocidadActual;
     private bool EsPosibleCorrer = true;
 
@@ -40,16 +44,13 @@ public class Jugador : MonoBehaviour
 
     Vector3 direccionFrontal, direccionLateral;
     //Escalar
-    [SerializeField]
-    private float VelocidadEscalar;
-    private bool estaEscalando;
-    private float distanciaEscalada;
-    private float nivelEscalada;
-    private float offsetEscalada;
-    private Vector3 posicionLLegarEscalada;
-    private Vector3 posicionInicial;
+    private bool estaEscalando = false;
+    private bool BloquearMovimiento = false;
+    private bool estaArriba = false;
 
-    private Rigidbody rigidbody;
+    //Componentes
+    private Rigidbody rigidbodyJugador;
+    private Animator animatorJugador;
 
     void Start()
     {
@@ -60,19 +61,19 @@ public class Jugador : MonoBehaviour
         direccionLateral = Quaternion.Euler(new Vector3(0, 90, 0)) * direccionFrontal;
         cantidadEnergiaActual = CantidadEnergia;
         PadreBarraEnergia = BarraEnergia.transform.parent.gameObject;
-        rigidbody = GetComponent<Rigidbody>();
+        rigidbodyJugador = GetComponent<Rigidbody>();
+        animatorJugador = GetComponent<Animator>();
     }
 
     void Update()
     {
         ManejadorPartida.VerificarInput();
-        if (ManejadorPartida.IntentandoMover)
-            StartCoroutine(UpdateControlador());
+        StartCoroutine(UpdateControlador());
     }
 
     IEnumerator UpdateControlador()
     {
-        if (!estaEscalando)
+        if (!estaEscalando && !BloquearMovimiento)
         {
             if (ManejadorPartida.PresionandoCorrer && EsPosibleCorrer)
             {
@@ -95,8 +96,7 @@ public class Jugador : MonoBehaviour
             vectorarreglado = new Vector3(vectorarreglado.x / 2, 0, vectorarreglado.z / 2);
 
             Vector3 direccionMirar = Vector3.Normalize(vectorarreglado);
-
-            ColocarForward(direccionMirar);
+            this.transform.forward = direccionMirar;
 
             Ray rayo = new Ray();
             rayo.direction = this.transform.forward;
@@ -106,34 +106,31 @@ public class Jugador : MonoBehaviour
                 this.transform.position += vectorarreglado;
         } //Caminar
 
+        AgrupadorJugador.transform.position = transform.position + DistanciaMantenerCamara;
+
         yield return new WaitForSeconds(1);
     }
 
     IEnumerator EscalarJugador()
     {
-        yield return new WaitForSeconds(.01f);
-        nivelEscalada += Mathf.Abs(.01f / (distanciaEscalada)) * VelocidadEscalar;
-        Debug.Log(nivelEscalada);
-        transform.position = Vector3.Lerp(posicionInicial, posicionLLegarEscalada, nivelEscalada);
-
-        if (nivelEscalada < 1)
-            StartCoroutine(EscalarJugador());
-        else
+        yield return new WaitForSeconds(.2f);
+        if (ManejadorPartida.PresionandoEscalar && !estaArriba)
         {
-            Vector3 agregarForward = new Vector3(Mathf.Abs(transform.forward.x) == 1 ? offsetEscalada * (transform.forward.x.ToString().Contains("-") ? -1 : 1) : Mathf.Abs(transform.forward.x) > 0 ? offsetEscalada / 2 * (transform.forward.x.ToString().Contains("-") ? -1 : 1) : 0,
-                                                 0,
-                                                 Mathf.Abs(transform.forward.z) == 1 ? offsetEscalada * (transform.forward.z.ToString().Contains("-") ? -1 : 1) : Mathf.Abs(transform.forward.z) > 0 ? offsetEscalada / 2 * (transform.forward.z.ToString().Contains("-") ? -1 : 1) : 0);
-            transform.position += transform.forward + agregarForward;
-            rigidbody.isKinematic = false;
-            rigidbody.useGravity = true;
-            distanciaEscalada = 0;
-            nivelEscalada = 0;
-            offsetEscalada = 0;
-            posicionLLegarEscalada = Vector3.zero;
-            posicionInicial = Vector3.zero;
-            estaEscalando = false;
-            yield return null;
+            animatorJugador.SetBool("SubirObjeto",true);
         }
+        else if (ManejadorPartida.PresionandoAtras && !estaArriba)
+        {
+            animatorJugador.SetBool("Soltarse", true);
+            TerminarEscalar();
+        }
+        else if (ManejadorPartida.PresionandoEscalar && estaArriba)
+        {
+            animatorJugador.SetBool("BajarObjeto",true);
+            TerminarEscalar();
+        }
+
+        if (estaEscalando)
+            StartCoroutine(EscalarJugador());
     }
 
     IEnumerator ControlarBarraEnergia(bool bajarBarra)
@@ -175,26 +172,41 @@ public class Jugador : MonoBehaviour
         BarraVida.fillAmount = Vida / 100f;
     }
 
-    public void AsignarObjetivoEscalada(Vector3 posicionObstaculo,Vector3 posicionObjetoLLegar,float offsetFinal)
+    public void IniciarEscalada(Transform objeto, TipoEscalar tipoObstaculo,bool mantenerQuietoAlSubir)
     {
-        if (!estaEscalando && rigidbody.velocity.y == 0)
+        if (!estaEscalando)
         {
-            rigidbody.isKinematic = true;
-            rigidbody.useGravity = false;
-            ColocarForward(posicionObstaculo - this.transform.position);
-            posicionInicial = transform.position;
-            posicionLLegarEscalada = new Vector3(transform.position.x, posicionObjetoLLegar.y,transform.position.z);
-            distanciaEscalada = Vector3.Distance(posicionObjetoLLegar, this.transform.position);
-            offsetEscalada = offsetFinal;
+            rigidbodyJugador.useGravity = false;
+            rigidbodyJugador.isKinematic = true;
+            animatorJugador.SetInteger("Agarrarse",(int)tipoObstaculo);
             estaEscalando = true;
+            BloquearMovimiento = true;
+            Vector3 direccionMirar = objeto.position - transform.position;
+            this.transform.forward = direccionMirar;
             StartCoroutine(EscalarJugador());
         }
     }
 
-    private void ColocarForward(Vector3 forwardColocar)
+    public void AlSubirEscalando()
     {
-        AgrupadorJugador.transform.SetParent(AgrupadorJugador.transform.parent.parent);
-        this.transform.forward = forwardColocar;
-        AgrupadorJugador.transform.SetParent(this.transform);
+        animatorJugador.SetBool("SubirObjeto", false);
+        estaArriba = true;
+    }
+
+    public void TerminarEscalar()
+    {
+        estaEscalando = false;
+        rigidbodyJugador.useGravity = true;
+        rigidbodyJugador.isKinematic = false;
+        BloquearMovimiento = false;
+        estaArriba = false;
+    }
+
+    public void LimpiarValoresAnimatorEscalada()
+    {
+        animatorJugador.SetInteger("Agarrarse",0);
+        animatorJugador.SetBool("SubirObjeto",false);
+        animatorJugador.SetBool("BajarObjeto", false);
+        animatorJugador.SetBool("Soltarse",false);
     }
 }

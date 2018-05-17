@@ -7,16 +7,16 @@ public class Obstaculo : MonoBehaviour {
     [SerializeField]
     private bool EsPosibleEscalar;
     [SerializeField]
-    private float OffsetEscalar;
+    private TipoEscalar TipoObjeto;
     [SerializeField]
-    private GameObject PosicionadorSubida;
+    private bool NoMoverAlSubir;
 
-    private void OnTriggerEnter(Collider other)
+    private void OnTriggerStay(Collider other)
     {
-        if (EsPosibleEscalar && other.tag == "Player")
+        if(EsPosibleEscalar && other.tag == "Player" && ManejadorPartida.PresionandoEscalar)
         {
             Jugador jugador = other.GetComponent<Jugador>();
-            jugador.AsignarObjetivoEscalada(this.transform.position, PosicionadorSubida.transform.position, OffsetEscalar);
+            jugador.IniciarEscalada(transform,TipoObjeto,NoMoverAlSubir);
         }
     }
 }
